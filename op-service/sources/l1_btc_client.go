@@ -59,17 +59,16 @@ func (s *L1BTCClient) FetchReceipts(ctx context.Context, blockHash common.Hash) 
 }
 
 func (s *L1BTCClient) InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error) {
-	// chainHash := ConvCommonToChainHash(hash)
+	chainHash := ConvCommonToChainHash(hash)
 
-	// block, err := s.GetBlock(chainHash)
-	// if err != nil {
-	// return nil, nil, fmt.Errorf("failed to fetch block by hash %s: %w", hash.String(), err)
-	// }
+	block, err := s.GetBlock(chainHash)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to fetch block by hash %s: %w", hash.String(), err)
+	}
 
-	// transactions := make(types.Transactions, len(block.Transactions))
+	transactions := make(types.Transactions, len(block.Transactions))
 
 	var blockInfo eth.BlockInfo
-	var transactions types.Transactions
 	return blockInfo, transactions, nil
 }
 
