@@ -76,7 +76,7 @@ type DerivationPipeline struct {
 }
 
 // NewDerivationPipeline creates a DerivationPipeline, to turn L1 data into L2 block-inputs.
-func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L1Fetcher, l1Blobs L1BlobsFetcher,
+func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher, l1BTCFetcher L1Fetcher, l1Blobs L1BlobsFetcher,
 	altDA AltDAInputFetcher, l2Source L2Source, metrics Metrics) *DerivationPipeline {
 
 	// Pull stages
@@ -90,10 +90,24 @@ func NewDerivationPipeline(log log.Logger, rollupCfg *rollup.Config, l1Fetcher L
 	attrBuilder := NewFetchingAttributesBuilder(rollupCfg, l1Fetcher, l2Source)
 	attributesQueue := NewAttributesQueue(log, rollupCfg, attrBuilder, batchQueue)
 
+	var btcStages []ResettableStage
+	if l1BTCFetcher != nil {
+		btcL1Traversal := NewL1Traversal(log, rollupCfg, l1BTCFetcher)
+		btcL1Src := NewL1Retrieval(log, nil, btcL1Traversal)
+		btcFrameQueue := NewFrameQueue(log, btcL1Src)
+		btcBank := NewChannelBank(log, rollupCfg, btcFrameQueue, l1BTCFetcher, metrics)
+		btcChInReader := NewChannelInReader(rollupCfg, log, btcBank, metrics)
+		btcBatchQueue := NewBatchQueue(log, rollupCfg, btcChInReader, l2Source)
+		btcAttrBuilder := NewFetchingAttributesBuilder(rollupCfg, l1BTCFetcher, l2Source)
+		btcAttributesQueue := NewAttributesQueue(log, rollupCfg, btcAttrBuilder, btcBatchQueue)
+		btcStages = []ResettableStage{btcL1Traversal, btcL1Src, btcFrameQueue, btcBank, btcChInReader, btcBatchQueue, btcAttributesQueue}
+	}
+
 	// Reset from ResetEngine then up from L1 Traversal. The stages do not talk to each other during
 	// the ResetEngine, but after the ResetEngine, this is the order in which the stages could talk to each other.
 	// Note: The ResetEngine is the only reset that can fail.
 	stages := []ResettableStage{l1Traversal, l1Src, altDA, frameQueue, bank, chInReader, batchQueue, attributesQueue}
+	stages = append(stages, btcStages...)
 
 	return &DerivationPipeline{
 		log:       log,
