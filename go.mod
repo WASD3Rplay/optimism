@@ -245,7 +245,7 @@ require (
 )
 
 replace (
-	github.com/babylonlabs-io/finality-gadget v0.1.2-0.20241003113442-8d38bf769d20 => github.com/WASD3Rplay/finality-gadget v0.1.2-0.20241104063605-35167009e4af
+	github.com/babylonlabs-io/finality-gadget v0.1.2-0.20241003113442-8d38bf769d20 => github.com/WASD3Rplay/finality-gadget v0.1.2-0.20241104091223-97ccc8458426
 	github.com/ethereum/go-ethereum v1.14.8 => github.com/ethereum-optimism/op-geth v1.101408.0-rc.4.0.20240827042333-110c433a2469
 	github.com/gogo/protobuf => github.com/regen-network/protobuf v1.3.3-alpha.regen.1
 )
