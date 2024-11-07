@@ -2,11 +2,15 @@ package sources
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/babylonlabs-io/finality-gadget/btcclient"
 	"github.com/babylonlabs-io/finality-gadget/log"
+	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
 	"github.com/ethereum-optimism/optimism/op-node/rollup/derive"
 	"github.com/ethereum-optimism/optimism/op-service/eth"
 	"github.com/ethereum-optimism/optimism/op-service/sources/caching"
@@ -40,40 +44,64 @@ func NewL1BTCClient(cfg *btcclient.BTCConfig, metrics caching.Metrics, config *L
 	}, nil
 }
 
+const (
+	ReceiptStatusSuccessfulBTC = uint64(2)
+)
+
 func (s *L1BTCClient) FetchReceipts(ctx context.Context, blockHash common.Hash) (eth.BlockInfo, types.Receipts, error) {
-	info, txs, err := s.InfoAndTxsByHash(ctx, blockHash)
+	block, err := s.infoAndTxsByHash(ctx, blockHash)
 	if err != nil {
 		return nil, nil, fmt.Errorf("querying block: %w", err)
 	}
-	receipts := make(types.Receipts, len(txs))
-	for i, tx := range txs {
+
+	blockInfo := types.NewBlock(&types.Header{}, nil, nil, nil)
+
+	receipts := make(types.Receipts, len(block.Transactions))
+	for i, tx := range block.Transactions {
+		var logs []*types.Log = make([]*types.Log, 0, len(tx.TxOut))
+		for _, out := range tx.TxOut {
+			_, addresses, _, err := txscript.ExtractPkScriptAddrs(out.PkScript, &chaincfg.MainNetParams)
+			if err != nil {
+				return nil, nil, fmt.Errorf("failed to extract pkscript addresses: %w", err)
+			}
+			if len(addresses) == 0 {
+				continue
+			}
+
+			// TODO : get ethereum address using interop
+			logs = append(logs, &types.Log{
+				Address: ConvBTCAddressToEth(addresses[0].EncodeAddress()),
+				Topics:  []common.Hash{},
+				// Data:    out.PkScript,
+			})
+		}
 		receipts[i] = &types.Receipt{
-			Status:            types.ReceiptStatusSuccessful,
+			Status:            ReceiptStatusSuccessfulBTC,
 			CumulativeGasUsed: 0,
-			Logs:              []*types.Log{},
-			TxHash:            tx.Hash(),
+			Logs:              logs,
 		}
 	}
 
-	return info, receipts, nil
+	return eth.BlockToInfo(blockInfo), receipts, nil
 }
 
-func (s *L1BTCClient) InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error) {
+func (s *L1BTCClient) infoAndTxsByHash(ctx context.Context, hash common.Hash) (*wire.MsgBlock, error) {
 	chainHash := ConvCommonToChainHash(hash)
 
 	block, err := s.GetBlock(chainHash)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to fetch block by hash %s: %w", hash.String(), err)
+		return nil, fmt.Errorf("failed to fetch block by hash %s: %w", hash.String(), err)
 	}
 
-	transactions := make(types.Transactions, len(block.Transactions))
+	return block, nil
+}
 
-	var blockInfo eth.BlockInfo
-	return blockInfo, transactions, nil
+func (s *L1BTCClient) InfoAndTxsByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, types.Transactions, error) {
+	return nil, nil, errors.New("not implemented")
 }
 
 func (s *L1BTCClient) InfoByHash(ctx context.Context, hash common.Hash) (eth.BlockInfo, error) {
-	return nil, nil
+	return nil, errors.New("not implemented")
 }
 
 // L1BlockRefByLabel returns the [eth.L1BlockRef] for the given block label.
@@ -157,4 +185,10 @@ func ConvCommonToChainHash(commonHash common.Hash) (chainHash *chainhash.Hash) {
 	chainHash = &chainhash.Hash{}
 	chainHash.SetBytes(commonHash.Bytes())
 	return chainHash
+}
+
+func ConvBTCAddressToEth(btcAddr string) (ethAddr common.Address) {
+	ethAddr = common.Address{}
+	ethAddr.SetBytes([]byte(btcAddr))
+	return ethAddr
 }

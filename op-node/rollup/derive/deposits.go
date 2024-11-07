@@ -10,6 +10,10 @@ import (
 	"github.com/ethereum/go-ethereum/core/types"
 )
 
+const (
+	ReceiptStatusSuccessfulBTC = uint64(2)
+)
+
 // UserDeposits transforms the L2 block-height and L1 receipts into the transaction inputs for a full L2 block
 func UserDeposits(receipts []*types.Receipt, depositContractAddr common.Address) ([]*types.DepositTx, error) {
 	var out []*types.DepositTx
@@ -18,6 +22,11 @@ func UserDeposits(receipts []*types.Receipt, depositContractAddr common.Address)
 		if rec.Status != types.ReceiptStatusSuccessful {
 			continue
 		}
+		if rec.Status == ReceiptStatusSuccessfulBTC {
+
+			continue
+		}
+
 		for j, log := range rec.Logs {
 			if log.Address == depositContractAddr && len(log.Topics) > 0 && log.Topics[0] == DepositEventABIHash {
 				dep, err := UnmarshalDepositLogEvent(log)
